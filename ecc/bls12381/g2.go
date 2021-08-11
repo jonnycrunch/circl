@@ -59,9 +59,39 @@ func (g *G2) cmov(P *G2, b int) {
 	(&g.y).CMov(&g.y, &P.y, b)
 	(&g.z).CMov(&g.z, &P.z, b)
 }
+func (g *G2) IsRTorsionSlow() bool {
+	var P G2
+	P.scalarMult(ff.ScalarOrder(), g)
+	return P.IsIdentity()
+}
 
 // IsRTorsion returns true if point is r-torsion.
-func (g *G2) IsRTorsion() bool { var P G2; P.scalarMult(ff.ScalarOrder(), g); return P.IsIdentity() }
+func (g *G2) IsRTorsion() bool {
+	// See https://eprint.iacr.org/2019/814.pdf for details
+	var Q G2
+	var mg G2
+	Q.Set(g)
+	mg.Set(g)
+	mg.Neg()
+
+	Q.psi()
+	Q.scalarMult(g2PsiCoeff.minusZ[:], &Q)
+	Q.Neg()        // Q=[z]\psi(g)
+	Q.Add(&Q, &mg) // Q=[z]\psi(g)-g
+	Q.psi()
+	Q.psi()      // Q=[z]\psi^3(g)-\psi^2(g)
+	Q.Add(&Q, g) // Q=[z]\psi^3(g)-\psi^2(g)+g
+
+	return Q.IsIdentity()
+}
+
+func (g *G2) psi() {
+	g.x.Frob(&g.x)
+	g.y.Frob(&g.y)
+	g.z.Frob(&g.z)
+	g.x.Mul(&g2PsiCoeff.alpha, &g.x)
+	g.y.Mul(&g2PsiCoeff.beta, &g.y)
+}
 
 // Double updates g = 2g.
 func (g *G2) Double() { doubleAndLine(g, nil) }

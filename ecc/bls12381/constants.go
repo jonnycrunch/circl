@@ -1,6 +1,10 @@
 package bls12381
 
-import "github.com/cloudflare/circl/ecc/bls12381/ff"
+import (
+	"fmt"
+
+	"github.com/cloudflare/circl/ecc/bls12381/ff"
+)
 
 // Scalar represents positive integers such that 0 <= x < Order, where
 //  Order = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
@@ -27,12 +31,28 @@ var (
 		beta0 ff.Fp    // beta0 = F(2)^(2*(p-1)/3) where F = GF(p).
 		beta1 ff.Fp    // beta1 = F(2)^(1*(p-1)/3) where F = GF(p).
 	}
+	g2PsiCoeff struct {
+		minusZ [16]byte // -z, the BLS12 parameter
+		alpha  ff.Fp2   // alpha = t^2/\sigma(t^2) where t=w
+		beta   ff.Fp2   // beta = t^3/\sigma(t^3) where t=w
+	}
 )
 
 func err(e error) {
 	if e != nil {
 		panic(e)
 	}
+}
+
+func ratioKummer(t *ff.Fp12) (*ff.Fp2, error) {
+	var r ff.Fp12
+	r.Frob(t)
+	r.Inv(&r)
+	r.Mul(t, &r)
+	if r[1].IsZero() != 1 || r[0][1].IsZero() != 1 || r[0][2].IsZero() != 1 {
+		return nil, fmt.Errorf("failure of result %v to be in Fp2", r)
+	}
+	return &r[0][0], nil
 }
 
 func init() {
@@ -125,4 +145,19 @@ func init() {
 	err(g1Check.beta0.SetString("0x1a0111ea397fe699ec02408663d4de85aa0d857d89759ad4897d29650fb85f9b409427eb4f49fffd8bfd00000000aaac"))
 	err(g1Check.beta1.SetString("0x5f19672fdf76ce51ba69c6076a0f77eaddb3a93be6f89688de17d813620a00022e01fffffffefffe"))
 	g1Check.coef = [16]byte{0x55, 0x55, 0x55, 0x55, 0x00, 0x00, 0x00, 0x00, 0x56, 0xe1, 0x55, 0x55, 0x00, 0x8c, 0x6c, 0x39}
+	g2PsiCoeff.minusZ = [16]byte{0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0xd2}
+	w := &ff.Fp12{}
+	w[1].SetOne()
+	t := &ff.Fp12{}
+	t.Set(w)
+	tsq := &ff.Fp12{}
+	tsq.Mul(t, t)
+	alpha, errval := ratioKummer(tsq)
+	err(errval)
+	g2PsiCoeff.alpha.Set(alpha)
+	tcube := &ff.Fp12{}
+	tcube.Mul(tsq, t)
+	beta, errval := ratioKummer(tcube)
+	err(errval)
+	g2PsiCoeff.beta.Set(beta)
 }
